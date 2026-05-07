@@ -18,7 +18,25 @@ just install      # symlink every skill into ~/.claude/skills/
 just list         # show install state
 just status       # exit non-zero if anything is missing or hijacked
 just uninstall    # remove only the symlinks this repo created
+just lint         # validate every SKILL.md frontmatter
+just new <name>   # scaffold a new skill from .claude/skills/_template/
 ```
 
 Symlinks point back into the repo, so editing a `SKILL.md` here updates
-the installed skill immediately — no re-install needed.
+the installed skill immediately — no re-install needed. Directories
+prefixed with `_` (e.g. `_template/`) are skipped by all install
+recipes.
+
+## Adding a new skill
+
+```sh
+just new my-skill
+```
+
+Edit `.claude/skills/my-skill/SKILL.md` — fill in the `description`
+(include a `TRIGGER when:` clause so Claude Code routes to it), then
+flesh out the `Rules` and `Examples` sections from the template. Run
+`just lint` to verify the frontmatter, then `just install` to symlink
+it.
+
+Frontmatter is validated on every push by `.github/workflows/ci.yml`.
