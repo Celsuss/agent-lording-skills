@@ -14,6 +14,7 @@ install:
     shopt -s nullglob
     for d in "{{src}}"/*/; do
         name=$(basename "$d")
+        [[ "$name" == _* ]] && continue
         target="{{dst}}/$name"
         if [[ -e "$target" && ! -L "$target" ]]; then
             echo "skipped  $name (real dir exists at $target)"
@@ -30,6 +31,7 @@ uninstall:
     shopt -s nullglob
     for d in "{{src}}"/*/; do
         name=$(basename "$d")
+        [[ "$name" == _* ]] && continue
         target="{{dst}}/$name"
         if [[ ! -e "$target" && ! -L "$target" ]]; then
             echo "absent    $name"
@@ -55,6 +57,7 @@ list:
     shopt -s nullglob
     for d in "{{src}}"/*/; do
         name=$(basename "$d")
+        [[ "$name" == _* ]] && continue
         target="{{dst}}/$name"
         if [[ -L "$target" ]]; then
             resolved=$(readlink -f "$target" || echo "<broken>")
@@ -80,6 +83,7 @@ status:
     bad=0
     for d in "{{src}}"/*/; do
         name=$(basename "$d")
+        [[ "$name" == _* ]] && continue
         target="{{dst}}/$name"
         if [[ -L "$target" && -e "$target" ]]; then
             resolved=$(readlink -f "$target")
@@ -101,3 +105,27 @@ status:
         fi
     done
     exit $bad
+
+# Validate every SKILL.md frontmatter; exit non-zero on errors.
+lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    python3 "{{repo}}/scripts/lint_skills.py" "{{repo}}"
+
+# Scaffold a new skill from .claude/skills/_template/.
+new NAME:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    template="{{src}}/_template"
+    target="{{src}}/{{NAME}}"
+    if [[ ! -d "$template" ]]; then
+        echo "error: template not found at $template" >&2
+        exit 1
+    fi
+    if [[ -e "$target" ]]; then
+        echo "error: $target already exists" >&2
+        exit 1
+    fi
+    cp -r "$template" "$target"
+    sed -i 's/^name: _template$/name: {{NAME}}/' "$target/SKILL.md"
+    echo "created $target/SKILL.md (edit description + body, then 'just lint')"
