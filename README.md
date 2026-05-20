@@ -2,9 +2,24 @@
 
 Custom [Claude Code](https://docs.claude.com/en/docs/claude-code) skills.
 
+## What is a Claude Code skill?
+
+A skill is a markdown file with YAML frontmatter (`name`,
+`description`) that Claude Code loads from `~/.claude/skills/`. When
+you give Claude Code a task, it matches the task against every
+skill's `description` field and pulls in the matching skills' bodies
+as additional instructions — so the `description` is effectively a
+router, which is why every skill in this repo uses the explicit
+`TRIGGER when: … SKIP when: …` shape.
+
+See the [official skills
+documentation](https://docs.claude.com/en/docs/claude-code/skills)
+for the full spec.
+
 ## Skills
 
 - **`terraform`** — Conventions for writing Terraform/HCL. Triggered on `.tf` files. AWS IAM patterns (`aws_iam_policy_document`, no Access Keys in code), `init → fmt → validate → plan` workflow, never `apply` without approval.
+- **`kubernetes`** — Conventions for Kubernetes manifests and `kubectl`. Triggered on k8s manifests (`.yaml`/`.yml` with `apiVersion:` + `kind:`) or `kubectl` invocations. Enforces GitOps: cluster state changes go through manifests in the repo, not ad-hoc `kubectl` writes; read-only `kubectl get/describe/logs/top` allowed.
 - **`python`** — Conventions for Python code and `pyproject.toml`. Declarative dependency management (no `requirements.txt`/`setup.py`), uv/poetry only, ruff for lint+format, full type hints with the RORO pattern, pytest in `tests/`.
 - **`graphify-context`** — Navigation policy for repos containing a `graphify-out/` knowledge graph. Forbids raw `cat`/`grep`/`find`/`ls` for architecture questions; requires `GRAPH_REPORT.md` and the `graphify` CLI first. Raw reads allowed only when editing or for AST-invisible details.
 - **`repomix-context`** — Navigation policy for Terraform projects packed with [Repomix](https://repomix.com). Consult `repomix-output.xml` first for architecture/dependency/cross-file questions; refresh via `npx repomix` after significant changes.
@@ -40,3 +55,19 @@ flesh out the `Rules` and `Examples` sections from the template. Run
 it.
 
 Frontmatter is validated on every push by `.github/workflows/ci.yml`.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributor
+workflow.
+
+## Repository layout
+
+```
+.
+├── .claude/skills/      # one directory per skill; each has a SKILL.md
+│   └── _template/       # scaffold copied by `just new <name>`
+├── .github/workflows/   # CI: runs `just lint` on push/PR
+├── scripts/             # lint_skills.py (frontmatter validator)
+├── justfile             # install / uninstall / list / status / lint / new
+├── CONTRIBUTING.md      # contributor workflow
+├── PLAN.md              # roadmap
+└── README.md
+```

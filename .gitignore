@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Editor / IDE
+*.swp
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
