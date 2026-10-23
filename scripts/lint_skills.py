@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
-"""Validate frontmatter in every .claude/skills/*/SKILL.md.
+"""Validate frontmatter in every skills/*/SKILL.md.
+
+The rules are the intersection of what Claude Code, Codex, OpenCode, and
+Antigravity accept, so a skill that lints clean here loads in all four.
+
+`_`-prefixed directories (skills/_template/) are skipped, matching the install
+recipes: they are scaffolds, never installed, and never seen by a harness.
 
 Errors (exit 1):
-  - missing or malformed frontmatter block
+  - missing SKILL.md, or missing / malformed frontmatter block
   - missing `name` or `description`
   - `name` does not match the directory basename
-  - `description` is empty or longer than 1024 chars
+  - `name` is not lowercase [a-z0-9-]
+  - `description` is empty or longer than 1024 chars (Claude Code's limit is
+    the strictest known, so it governs)
 
 Warnings (exit 0):
   - `description` lacks any of: "Use when", "Triggered on", "TRIGGER when"
@@ -13,10 +21,12 @@ Warnings (exit 0):
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 DESCRIPTION_MAX = 1024
+NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 TRIGGER_PHRASES = ("use when", "triggered on", "trigger when")
 
 
@@ -61,8 +71,16 @@ def lint_skill(skill_dir: Path) -> tuple[list[str], list[str]]:
     name = fields.get("name")
     if not name:
         errors.append("missing 'name' in frontmatter")
-    elif name != skill_dir.name:
-        errors.append(f"name '{name}' does not match directory '{skill_dir.name}'")
+    else:
+        if name != skill_dir.name:
+            errors.append(
+                f"name '{name}' does not match directory '{skill_dir.name}'"
+            )
+        if not NAME_RE.match(name):
+            errors.append(
+                f"name '{name}' is not lowercase kebab-case [a-z0-9-]; "
+                "not every harness accepts other characters"
+            )
 
     desc = fields.get("description")
     if desc is None:
@@ -86,12 +104,19 @@ def lint_skill(skill_dir: Path) -> tuple[list[str], list[str]]:
 
 def main(argv: list[str]) -> int:
     repo = Path(argv[1]) if len(argv) > 1 else Path.cwd()
-    skills_root = repo / ".claude" / "skills"
+    skills_root = repo / "skills"
     if not skills_root.is_dir():
         print(f"error: {skills_root} is not a directory", file=sys.stderr)
         return 2
 
-    skill_dirs = sorted(p for p in skills_root.iterdir() if p.is_dir())
+    # `_`-prefixed directories are scaffolds (skills/_template/). Every
+    # install recipe skips them, so no harness ever sees them and the rules
+    # below -- which describe what a harness accepts -- do not apply.
+    skill_dirs = sorted(
+        p
+        for p in skills_root.iterdir()
+        if p.is_dir() and not p.name.startswith("_")
+    )
     if not skill_dirs:
         print(f"error: no skills found under {skills_root}", file=sys.stderr)
         return 2

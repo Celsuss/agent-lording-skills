@@ -1,110 +1,80 @@
 repo := justfile_directory()
-src  := repo / ".claude/skills"
-dst  := env_var('HOME') / ".claude/skills"
+link := repo / "scripts/link.sh"
+
+skills_src   := repo / "skills"
+commands_src := repo / "commands"
+
+# Where each harness looks. Claude Code reads ~/.claude/skills; Codex and
+# Antigravity read ~/.agents/skills; OpenCode auto-loads both, so two targets
+# reach all four CLIs. Override per invocation:
+#   just install skill_targets="~/.agents/skills"
+skill_targets := "~/.claude/skills ~/.agents/skills"
+
+# Antigravity derives its slash commands from skills and has no command
+# directory, so it is absent here.
+command_targets := "~/.claude/commands ~/.codex/prompts ~/.config/opencode/command"
 
 # Show available recipes.
 default:
     @just --list
 
-# Symlink every skill in this repo into ~/.claude/skills/.
+# Symlink every skill and command into each harness directory.
 install:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    mkdir -p "{{dst}}"
-    shopt -s nullglob
-    for d in "{{src}}"/*/; do
-        name=$(basename "$d")
-        [[ "$name" == _* ]] && continue
-        target="{{dst}}/$name"
-        if [[ -e "$target" && ! -L "$target" ]]; then
-            echo "skipped  $name (real dir exists at $target)"
-            continue
-        fi
-        ln -sfn "${d%/}" "$target"
-        echo "installed $name"
-    done
+    @bash "{{link}}" install "{{repo}}" "{{skills_src}}"   dir  {{skill_targets}}
+    @bash "{{link}}" install "{{repo}}" "{{commands_src}}" file {{command_targets}}
 
 # Remove only the symlinks this repo installed.
 uninstall:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    shopt -s nullglob
-    for d in "{{src}}"/*/; do
-        name=$(basename "$d")
-        [[ "$name" == _* ]] && continue
-        target="{{dst}}/$name"
-        if [[ ! -e "$target" && ! -L "$target" ]]; then
-            echo "absent    $name"
-            continue
-        fi
-        if [[ ! -L "$target" ]]; then
-            echo "skipped   $name (not a symlink)"
-            continue
-        fi
-        resolved=$(readlink -f "$target" || true)
-        if [[ "$resolved" != "{{repo}}"/* ]]; then
-            echo "skipped   $name (links outside repo: $resolved)"
-            continue
-        fi
-        rm "$target"
-        echo "removed   $name"
-    done
+    @bash "{{link}}" uninstall "{{repo}}" "{{skills_src}}"   dir  {{skill_targets}}
+    @bash "{{link}}" uninstall "{{repo}}" "{{commands_src}}" file {{command_targets}}
 
-# Show install state of each skill in this repo.
+# Show install state of every skill and command, per target.
 list:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    shopt -s nullglob
-    for d in "{{src}}"/*/; do
-        name=$(basename "$d")
-        [[ "$name" == _* ]] && continue
-        target="{{dst}}/$name"
-        if [[ -L "$target" ]]; then
-            resolved=$(readlink -f "$target" || echo "<broken>")
-            if [[ ! -e "$target" ]]; then
-                echo "broken    $name -> $(readlink "$target")"
-            elif [[ "$resolved" == "{{repo}}"/* ]]; then
-                echo "installed $name -> $resolved"
-            else
-                echo "external  $name -> $resolved"
-            fi
-        elif [[ -e "$target" ]]; then
-            echo "occupied  $name (real dir at $target)"
-        else
-            echo "missing   $name"
-        fi
-    done
+    @bash "{{link}}" list "{{repo}}" "{{skills_src}}"   dir  {{skill_targets}}
+    @bash "{{link}}" list "{{repo}}" "{{commands_src}}" file {{command_targets}}
 
-# Verify install state; exit non-zero if anything is wrong.
+# Verify install state; exit non-zero if anything is missing or hijacked.
 status:
     #!/usr/bin/env bash
-    set -euo pipefail
-    shopt -s nullglob
+    set -uo pipefail
     bad=0
-    for d in "{{src}}"/*/; do
-        name=$(basename "$d")
-        [[ "$name" == _* ]] && continue
-        target="{{dst}}/$name"
-        if [[ -L "$target" && -e "$target" ]]; then
-            resolved=$(readlink -f "$target")
-            if [[ "$resolved" == "{{repo}}"/* ]]; then
-                echo "ok       $name"
-                continue
-            fi
-            echo "external $name -> $resolved"
-            bad=1
-        elif [[ -L "$target" ]]; then
-            echo "broken   $name -> $(readlink "$target")"
-            bad=1
-        elif [[ -e "$target" ]]; then
-            echo "occupied $name (real dir)"
-            bad=1
+    bash "{{link}}" status "{{repo}}" "{{skills_src}}"   dir  {{skill_targets}}  || bad=1
+    bash "{{link}}" status "{{repo}}" "{{commands_src}}" file {{command_targets}} || bad=1
+    exit $bad
+
+# Report which harnesses and target directories exist on this machine.
+# Diagnostic only: always exits 0. `just status` is the enforcing recipe.
+doctor:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    echo "harnesses on PATH:"
+    for cli in claude codex opencode antigravity; do
+        path=$(command -v "$cli" 2>/dev/null || true)
+        if [[ -n "$path" ]]; then
+            printf '  found     %-12s %s\n' "$cli" "$path"
         else
-            echo "missing  $name"
-            bad=1
+            printf '  absent    %s\n' "$cli"
         fi
     done
-    exit $bad
+    echo
+    echo "target directories:"
+    for raw in {{skill_targets}} {{command_targets}}; do
+        dir="${raw/#\~/$HOME}"
+        if [[ ! -d "$dir" ]]; then
+            printf '  absent    %s\n' "$raw"
+            continue
+        fi
+        # Count entries in this target that point back into this repo.
+        n=0
+        shopt -s nullglob
+        for entry in "$dir"/*; do
+            [[ -L "$entry" ]] || continue
+            resolved=$(readlink -f "$entry" 2>/dev/null || true)
+            [[ "$resolved" == "{{repo}}"/* ]] && n=$((n + 1))
+        done
+        shopt -u nullglob
+        printf '  present   %-36s %d linked from this repo\n' "$raw" "$n"
+    done
 
 # Validate every SKILL.md frontmatter; exit non-zero on errors.
 lint:
@@ -112,12 +82,12 @@ lint:
     set -euo pipefail
     python3 "{{repo}}/scripts/lint_skills.py" "{{repo}}"
 
-# Scaffold a new skill from .claude/skills/_template/.
+# Scaffold a new skill from skills/_template/.
 new NAME:
     #!/usr/bin/env bash
     set -euo pipefail
-    template="{{src}}/_template"
-    target="{{src}}/{{NAME}}"
+    template="{{skills_src}}/_template"
+    target="{{skills_src}}/{{NAME}}"
     if [[ ! -d "$template" ]]; then
         echo "error: template not found at $template" >&2
         exit 1
