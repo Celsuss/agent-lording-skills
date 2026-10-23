@@ -12,17 +12,24 @@ With no text following, plan the feature under discussion in the conversation;
 if there is none, ask which feature to plan rather than guessing.
 
 ## Rules
-
-- Before planning, read the existing code in the areas the feature touches, and check whether `l-stack/changes/` already has a directory for it. Extend an existing plan rather than starting a parallel one.
-- Every ###  under ## Decisions names at least one rejected alternative and why it lost.
+- Before planning, read the existing code in the areas the feature touches, and check whether
+  `l-stack/changes/` at the repository root already has a directory for this feature. Extend an
+  existing plan rather than starting a parallel one.
+- Then decide whether this needs a plan at all. If the feature is a single obvious change with
+  no real design choices, say so, propose the change directly, and create no files. The plan
+  apparatus is for work where the alternatives matter. Everything below applies only once you
+  have decided a plan is warranted.
+- Every ### under ## Decisions names at least one rejected alternative and why it lost.
 - If you reach a decision where no alternative was genuinely considered, state that explicitly in the Decisions entry rather than inventing a rejected option to fill the slot.
 - ## Open Questions is either empty or every entry is marked blocking / deferrable, with the reason it's safe to defer.
-- For each new proposed feature create a new directory `l-stack/changes/<feature>`.
+- Plans live under `l-stack/changes/<feature>/` at the repository root (the directory
+  containing `.git`, which is also the session's working directory). Create `l-stack/`,
+  `l-stack/changes/`, and the feature directory if they don't exist.
+- `<feature>` is kebab-case and verb-first: `add-cicd`, `poll-merge-requests`.
 - Each feature directory should contain a `tasks.md` file and a `design.md` file.
 - `tasks.md` should contain a list of tasks that needs to be implemented.
 - `design.md` contains the overall design decisions, in these sections and in this order: `## Goals / Non-Goals`, `## Decisions`, `## Risks / Trade-offs`, `## Open Questions`.
-- If the feature is a single obvious change with no real design choices, say so and skip the plan directory — propose the change directly instead. The plan apparatus is for work where the alternatives matter.
-- Once the plan is ready present the plan and wait for approval before implementing anything.
+- Once the plan is ready present the plan and wait for approval before implementing the plan.
 
 ## Examples
 
